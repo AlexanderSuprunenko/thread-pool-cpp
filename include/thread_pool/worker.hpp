@@ -2,6 +2,9 @@
 
 #include <atomic>
 #include <thread>
+#include <iostream>
+
+#include <chrono>
 
 namespace tp
 {
@@ -67,6 +70,15 @@ public:
      */
     static size_t getWorkerIdForCurrentThread();
 
+    int dump()
+    {
+        std::cout << " idx-> j->" << m_thread.joinable() << " " << m_thread.get_id() << " cnt->( " << m_count << " + " << m_steal_count << " )\n";
+        long long int p1 = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        p1 -= p;
+        std::cout << "\t\t" << p1 << "\t" << p << "\n";
+        return m_count + m_steal_count;
+    }
+
 private:
     /**
      * @brief threadFunc Executing thread function.
@@ -78,6 +90,9 @@ private:
     Queue<Task> m_queue;
     std::atomic<bool> m_running_flag;
     std::thread m_thread;
+	////
+    int m_count = 0, m_steal_count = 0;
+    long long int p;
 };
 
 
@@ -97,6 +112,7 @@ inline Worker<Task, Queue>::Worker(size_t queue_size)
     : m_queue(queue_size)
     , m_running_flag(true)
 {
+    p = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 }
 
 template <typename Task, template<typename> class Queue>
@@ -113,6 +129,9 @@ inline Worker<Task, Queue>& Worker<Task, Queue>::operator=(Worker&& rhs) noexcep
         m_queue = std::move(rhs.m_queue);
         m_running_flag = rhs.m_running_flag.load();
         m_thread = std::move(rhs.m_thread);
+        m_count = std::move(rhs.m_count);
+        m_steal_count = std::move(rhs.m_steal_count);
+        p = std::move(rhs.p);
     }
     return *this;
 }
@@ -158,7 +177,8 @@ inline void Worker<Task, Queue>::threadFunc(size_t id, Worker* steal_donor)
 
     while (m_running_flag.load(std::memory_order_relaxed))
     {
-        if (m_queue.pop(handler) || steal_donor->steal(handler))
+//        if ( m_queue.pop(handler) || steal_donor->steal(handler) )
+        if ( (m_queue.pop(handler)? ++m_count, true : false) || (steal_donor->steal(handler)? ++m_steal_count, true : false) )
         {
             try
             {
