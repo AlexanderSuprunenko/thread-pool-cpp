@@ -69,7 +69,19 @@ public:
      * @note All exceptions thrown by handler will be suppressed.
      */
     template <typename Handler>
-    void post(Handler&& handler);
+    void post(Handler&& handler, bool block = false);
+
+    int dump_info()
+    {
+        int cnt = 0;
+        std::cout << "\nThread pool dump\n";
+        for(auto& worker_ptr : m_workers)
+        {
+            std::cout << "\t";
+            cnt += worker_ptr->dump();
+        }
+        return cnt;
+    }
 
 private:
     Worker<Task, Queue>& getWorker();
@@ -136,12 +148,16 @@ inline bool ThreadPoolImpl<Task, Queue>::tryPost(Handler&& handler)
 
 template <typename Task, template<typename> class Queue>
 template <typename Handler>
-inline void ThreadPoolImpl<Task, Queue>::post(Handler&& handler)
+inline void ThreadPoolImpl<Task, Queue>::post(Handler&& handler, bool block)
 {
-    const auto ok = tryPost(std::forward<Handler>(handler));
-    if (!ok)
+    while(true)
     {
-        throw std::runtime_error("thread pool queue is full");
+        const auto ok = tryPost(std::forward<Handler>(handler));
+        if(ok) return;
+        if (!block)
+        {
+            throw std::runtime_error("thread pool queue is full");
+        }
     }
 }
 
